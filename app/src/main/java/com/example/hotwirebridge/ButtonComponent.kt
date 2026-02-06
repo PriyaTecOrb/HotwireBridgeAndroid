@@ -1,44 +1,90 @@
 package com.example.hotwirebridge
 
 import android.util.Log
-import android.widget.Button
+import android.view.Menu
+import android.view.MenuItem
+import androidx.appcompat.app.AppCompatActivity
 import dev.hotwire.core.bridge.BridgeComponent
 import dev.hotwire.core.bridge.BridgeDelegate
 import dev.hotwire.core.bridge.Message
 import dev.hotwire.navigation.destinations.HotwireDestination
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-
 class ButtonComponent(
     name: String,
     private val delegate: BridgeDelegate<HotwireDestination>
 ) : BridgeComponent<HotwireDestination>(name, delegate) {
-    private lateinit var button: Button
+
+    private val menuItemId = 12345
+    private var buttonTitle: String? = null
 
     override fun onReceive(message: Message) {
-        // Handle incoming messages based on the message `event`.
-        Log.d("ButtonComponent", "Received message: ${message.event}")
-        Log.d("ButtonComponent", "Message data: ${message}")
+        Log.d("ButtonComponent", "Event: ${message.event}")
+
         when (message.event) {
-            "connect" -> handleConnectEvent(message)
-            else -> Log.w("ButtonComponent", "Unknown event for message: $message")
+            "connect" -> handleConnect(message)
+            "disconnect" -> handleDisconnect()
         }
     }
 
-    private fun handleConnectEvent(message: Message) {
+    private fun handleConnect(message: Message) {
         val data = message.data<MessageData>() ?: return
-
-        // Write native code to display a native submit button in the
-        // toolbar displayed in the delegate.destination. Use the
-        // incoming data.title to set the button title.
+        buttonTitle = data.title
+        showToolbar(data.title)
     }
 
-    private fun performButtonClick(): Boolean {
-        return replyTo("connect")
+    private fun handleDisconnect() {
+        buttonTitle = null
+        hideToolbar()
     }
 
-    // Use kotlinx.serialization annotations to define a serializable
-    // data class that represents the incoming message.data json.
+    private fun showToolbar(title: String) {
+        val activity = delegate.destination.fragment.activity
+        activity?.runOnUiThread {
+            val appCompatActivity = activity as? AppCompatActivity ?: return@runOnUiThread
+
+            appCompatActivity.supportActionBar?.apply {
+                this.title = title
+                setDisplayHomeAsUpEnabled(true)
+                show()
+            }
+
+            appCompatActivity.invalidateOptionsMenu()
+        }
+    }
+
+    private fun hideToolbar() {
+        val activity = delegate.destination.fragment.activity
+        activity?.runOnUiThread {
+            val appCompatActivity = activity as? AppCompatActivity ?: return@runOnUiThread
+
+            appCompatActivity.supportActionBar?.apply {
+                title = ""
+                setDisplayHomeAsUpEnabled(false)
+            }
+
+            appCompatActivity.invalidateOptionsMenu()
+        }
+    }
+
+    fun onPrepareMenu(menu: Menu) {
+        menu.clear()
+        val title = buttonTitle ?: return
+        menu.add(Menu.NONE, menuItemId, Menu.NONE, title).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+    }
+
+    fun onMenuItemSelected(itemId: Int): Boolean {
+        return if (itemId == menuItemId) {
+            Log.d("ButtonComponent", "Button clicked → sending event")
+            replyTo("button_clicked")
+            true
+        } else {
+            false
+        }
+    }
+
     @Serializable
     data class MessageData(
         @SerialName("title") val title: String
